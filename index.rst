@@ -16,6 +16,7 @@ Welcome to cse116's documentation!
    hof
    envclose
    theorems
+   polytypes
 
 
 
