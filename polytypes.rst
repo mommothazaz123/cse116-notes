@@ -14,6 +14,8 @@ cse116-typed-ind -> B
 
 cse116-subst-ind -> B
 
+cse116-unify-ind -> C, D, E
+
 Type System
 -----------
 A type system defines what types an expression can have
@@ -251,3 +253,59 @@ Examples
             G1 |- id 5 :: Int
 
     -- see slides page 12 for example 3
+
+Representing Types
+^^^^^^^^^^^^^^^^^^
+The eventual goal is to create a function ``infer``, which:
+
+- given a context G and an expression e,
+- returns a type T s.t. ``G |- e :: T``
+- or reports a type error
+
+.. code-block:: haskell
+
+    data Type = TInt     -- int
+        | Type :=> Type  -- T1 -> T2
+        | Var String     -- a, b, c
+
+    data Poly = Mono Type
+        | Forall TVar Poly
+
+    type TVar = String
+    type TEnv = [(Id, Poly)]  -- type environment
+    type Subst = [(String, Type)] -- type sub
+
+**Main idea**: let's implement infer like this:
+
+1. Depending on the kind of expression, find the typing rule that applies to it
+2. If the rule has premises, recursively call ``infer`` to obtain the types of subexpressions
+3. Combine the types of subexpressions according to the conclusion of the rule
+4. If no rule applies, report a type error
+
+The problem is, some of our typing rules are nondeterministic (see slides pg. 13)
+
+1. guessing type
+2. guessing when to generalize
+
+solution:
+
+1. whenever we need to guess a type, don't. just return a fresh type variable
+2. whenever a rule imposes a constraint on a type, try to find the right substitution for the free type vars to satisfy the constraint (unification)
+
+Unification
+^^^^^^^^^^^
+The unification problem: given two types T1 and T2, find a type substitution U s.t. ``U T1 = U T2``.
+
+Such a substitution is called a unifier of T1 and T2.
+
+e.g.:
+
+1. The unifier of ``a`` and ``Int`` is ``[a/Int]``
+2. ``a -> a`` and ``Int -> Int`` is ``[a/Int]``
+3. ``a -> Int`` and ``Int -> b`` is ``[a/Int, b/Int]``
+4. ``Int`` and ``Int`` is ``[]``
+5. ``a`` and ``a`` is ``[]``
+6. ``Int`` and ``Int -> Int`` is invalid
+7. ``Int`` and ``a -> a`` is invalid
+8. ``a`` and ``a -> a`` is invalid
+9. ``b`` and ``a -> a`` is ``[b/a -> a]``
