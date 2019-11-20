@@ -12,6 +12,8 @@ cse116-nanotype-ind -> D1
 
 cse116-typed-ind -> B
 
+cse116-subst-ind -> B
+
 Type System
 -----------
 A type system defines what types an expression can have
@@ -115,3 +117,137 @@ According to these rules, an expression can have zero, one, or many types.
 e.g. ``1 2`` has no types, ``1`` has 1 type, ``\x -> x`` has many types.
 
 One problem with this system: there's no generics.
+
+Polymorphic Types
+-----------------
+We can formalize a type ``a -> a`` as a polymorphic type: ``forall a . a -> a``
+
+- where ``a`` is a bound type variable
+- also called a type scheme
+- haskell has polymorphic types, but forall isn't usually required
+
+We can instantiate this scheme into different types by replacing ``a`` in the body with some type, e.g.
+instantiating with ``Int`` yields ``Int -> Int``.
+
+.. note::
+    Similar to lambda expression at type level
+
+With polymorphic types, we can derive ``e :: Int -> Int`` where ``e`` is
+
+.. code-block:: haskell
+
+    let id = \x -> x in
+        let y = id 5 in
+            id (\z -> z + y)
+
+Inference works as follows:
+
+1. When we have to pick a type T for x, we pick a fresh type variable a
+2. So the type of ``\x -> x`` comes out as ``a -> a``
+3. We can generalize this type to ``forall a . a -> a``
+4. When we apply id the first time, we instantiate this polymorphic type with ``Int``
+5. When we apply id the second time, we instantiate this polymorphic type with ``Int ->Int``
+
+Type System 3
+^^^^^^^^^^^^^
+Types:
+
+.. code-block:: haskell
+
+    -- Mono-types
+    T ::= Int
+        | T1 -> T2
+        | a             -- type variables
+
+    -- Poly-types
+    S ::= T             -- mono
+        | forall a . S  -- polymorphic
+
+    -- where a ∈ TVar, T ∈ Type, S ∈ Poly
+
+Type Environment
+""""""""""""""""
+
+The type environment now maps variables to poly-types: ``G : Var -> Poly``
+
+- example, ``G = [z: Int, id: forall a . a -> a]``
+
+Type Substitutions
+""""""""""""""""""
+
+We need a mechanism for replacing all type variables in a type with another type:
+
+A type substitution is a finite map from type variables to types: ``U : TVar -> Type``
+
+- example: ``U1 = [a / Int, b / (c -> c)]``
+
+To apply a substitution U to a type T means replace all type vars in T with whatever they are mapped to in U
+
+- example 1: ``U1 (a -> a) = Int -> Int``
+- example 2: ``U1 Int = Int``
+
+Typing Rules
+""""""""""""
+We need to change the typing rules so that:
+
+.. code-block:: haskell
+
+    -- 1. variables and their definitions can have polymorphic types
+    [T-Var] G |- x :: S          if x:S in G
+
+            G |- e1 :: S   G, x:S |- e2 :: T
+    [T-Let] ------------------------------------
+               G |- let x = e1 in e2 :: T
+
+    -- 2. we can instantiate a type scheme into a type
+             G |- e :: forall a . S
+    [T-Inst] ----------------------
+              G |- e :: [a / T] S
+
+    -- 3. we can generalize a type with free type variables into a type scheme
+                 G |- e :: S
+    [T-Gen] ---------------------- if not (a in FTV(G))  -- FTV = Free Type Variables
+            G |- e :: forall a . S
+
+    -- the rest of the rules are the same:
+    [T-Num] G |- n :: Int
+
+            G |- e1 :: Int    G |- e2 :: Int
+    [T-Add] --------------------------------
+                G |- e1 + e2 :: Int
+
+               G,x:T1 |- e :: T2
+    [T-Abs] ------------------------
+            G |- \x -> e :: T1 -> T2
+
+            G |- e1 :: T1 -> T2    G |- e2 :: T1
+    [T-App] ------------------------------------  -- modus ponens!
+                    G |- e1 e2 :: T2
+
+Examples
+""""""""
+
+.. code-block:: haskell
+
+    -- derive: [] |- \x -> x :: forall a . a -> a
+
+    [T-Var] ---------------
+            [x:a] |- x :: a
+    [T-Abs] -----------------------
+            [] |- \x -> x :: a -> a
+    [T-Gen] ----------------------------------  not (a in FTV([]))
+            [] |- \x -> x :: forall a . a -> a
+
+    -- derive: [x:a] |- x :: forall a . a
+    -- not derivable, since a is not in FTV([x:a])
+
+    -- derive: G1 |- id 5 :: Int where G1 = [id : (forall a . a -> a)]
+
+    [T-Var] -----------------------------
+            G1 |- id :: forall a . a -> a
+    [T-Inst]----------------------         -------------- [T-Num]
+            G1 |- id :: Int -> Int         G1 |- 5 :: Int
+    [T-App] ---------------------------------------------
+            G1 |- id 5 :: Int
+
+    -- see slides page 12 for example 3
