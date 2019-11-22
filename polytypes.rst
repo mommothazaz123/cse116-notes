@@ -16,6 +16,8 @@ cse116-subst-ind -> B
 
 cse116-unify-ind -> C, D, E
 
+cse116-infer-ind -> E
+
 Type System
 -----------
 A type system defines what types an expression can have
@@ -282,9 +284,32 @@ The eventual goal is to create a function ``infer``, which:
 3. Combine the types of subexpressions according to the conclusion of the rule
 4. If no rule applies, report a type error
 
+.. code-block:: haskell
+
+    -- | This is not the final version!!!
+    infer :: TypeEnv -> Expr -> Type
+    infer _    (ENum _)     = TInt
+    infer tEnv (EVar var)   = lookup var tEnv 
+    infer tEnv (EAdd e1 e2) =  
+        if t1 == TInt && t2 == TInt
+            then return TInt
+            else throw "type error: + expects Int operands"
+        where
+            t1 = infer tEnv e1
+            t2 = infer tEnv e2
+
 The problem is, some of our typing rules are nondeterministic (see slides pg. 13)
 
 1. guessing type
+
+.. code-block:: haskell
+
+    infer tEnv (ELam x e) = tX :=> tBody
+        where
+            tEnv' = extendTEnv x tX tEnv
+            tX    = ???         -- ??????
+            tBody = infer tEnv' e
+
 2. guessing when to generalize
 
 solution:
@@ -309,3 +334,50 @@ e.g.:
 7. ``Int`` and ``a -> a`` is invalid
 8. ``a`` and ``a -> a`` is invalid
 9. ``b`` and ``a -> a`` is ``[b/a -> a]``
+
+Infer 2
+"""""""
+To add constraint-based typing, we need to keep track of the current substitution:
+
+.. code-block:: haskell
+
+    -- | Now has to keep track of current substitution!
+    infer :: Subst -> TypeEnv -> Expr -> (Subst, Type)
+    infer sub _    (ENum _)     = (sub, TInt)
+    infer sub tEnv (EVar var)   = (sub, lookup var tEnv)
+
+    -- Lambda case: simply generate fresh type variable!
+    infer sub tEnv (ELam x e) = (sub1, tX' :=> tBody)
+        where
+            tEnv'          = extendTEnv x tX tEnv
+            tX             = freshTV -- we'll get to this
+            (sub1, tBody)  = infer sub tEnv' e
+            tX'            = apply sub1 tX
+
+    -- Add case: recursively infer types of operands 
+    -- and enforce constraint that they are both Int
+    infer sub tEnv (EAdd e1 e2) = (sub4, TInt)
+        where
+            (sub1, t1) = infer sub tEnv e1   -- 1. infer type of e1
+            sub2       = unify sub1 t1 Int   -- 2. constraint: t1 is Int
+            tEnv'      = apply sub2 tEnv     -- 3. apply subst to context (sets in scope)
+            (sub3, t2) = infer sub2 tEnv' e2 -- 4. infer e2 type in new ctx
+            sub4       = unify sub3 t2 Int   -- 5. constraint: t2 is Int
+
+.. note::
+    **Fresh Type Variables**
+
+    How do you create a new fresh type variable every time? You'll have to pass an argument along.
+
+Polymorphism
+^^^^^^^^^^^^
+
+When do we generalize a type like ``a -> a`` to ``forall a . a -> a``?
+
+When do we instantiate a polymorphic type and to what?
+
+**Generalization and Instantiation**
+
+- Whenever we infer a type for a let-defined variable, generalize it
+    - It's safe, even when not necessary
+- Whenever we see a variable with polymorphic type, instantiate it with a fresh type variable
