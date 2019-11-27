@@ -17,6 +17,7 @@ Welcome to cse116's documentation!
    envclose
    theorems
    polytypes
+   typeclasses
 
 
 
