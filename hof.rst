@@ -67,6 +67,8 @@ Filter
     fourChars = filter isFour
         where isFour x = length x == 4
 
+.. _map:
+
 Map
 ---
 Ex: we want to do some op on every elem

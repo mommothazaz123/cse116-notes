@@ -18,6 +18,7 @@ Welcome to cse116's documentation!
    theorems
    polytypes
    typeclasses
+   monads
 
 
 
